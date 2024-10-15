@@ -1,0 +1,291 @@
+from selenium import webdriver
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from bs4 import BeautifulSoup as bs
+import pandas as pd
+import time
+import re
+
+#Instalação do Web Driver (robô) para o Chrome
+servico = Service(ChromeDriverManager().install())
+
+#Para abrir o browser
+navegador = webdriver.Chrome(service=servico)
+
+#Criando uma lista para armazenar os dados
+dados_partidas = []
+links_partidas = []   
+
+#Links da página das partidas de cada copa
+url_partidas_copas = ['https://www.fifa.com/tournaments/mens/worldcup/2018russia/match-center', 'https://www.fifa.com/tournaments/mens/worldcup/2014brazil/match-center', 'https://www.fifa.com/tournaments/mens/worldcup/2010south-africa/match-center', 'https://www.fifa.com/tournaments/mens/worldcup/2006germany/match-center', 'https://www.fifa.com/tournaments/mens/worldcup/2002korea-japan/match-center', 'https://www.fifa.com/tournaments/mens/worldcup/1998france/match-center', 'https://www.fifa.com/tournaments/mens/worldcup/1994usa/match-center', 'https://www.fifa.com/tournaments/mens/worldcup/1990italy/match-center', 'https://www.fifa.com/tournaments/mens/worldcup/1986mexico/match-center', 'https://www.fifa.com/tournaments/mens/worldcup/1982spain/match-center', 'https://www.fifa.com/tournaments/mens/worldcup/1978argentina/match-center', 'https://www.fifa.com/tournaments/mens/worldcup/1974germany/match-center', 'https://www.fifa.com/tournaments/mens/worldcup/1970mexico/match-center', 'https://www.fifa.com/tournaments/mens/worldcup/1966england/match-center', 'https://www.fifa.com/tournaments/mens/worldcup/1962chile/match-center', 'https://www.fifa.com/tournaments/mens/worldcup/1958sweden/match-center', 'https://www.fifa.com/tournaments/mens/worldcup/1954switzerland/match-center', 'https://www.fifa.com/tournaments/mens/worldcup/1950brazil/match-center', 'https://www.fifa.com/tournaments/mens/worldcup/1938france/match-center', 'https://www.fifa.com/tournaments/mens/worldcup/1934italy/match-center', 'https://www.fifa.com/tournaments/mens/worldcup/1930uruguay/match-center']
+
+#Acessando o site do Fifa
+for url_partidas in url_partidas_copas:
+    navegador.get(url_partidas)
+    time.sleep(1)
+
+    #Clicando no botão para aceitar os cookies
+    try:
+        navegador.find_element('xpath', '//*[@id="onetrust-accept-btn-handler"]').click()
+    
+        time.sleep(1)
+    except:
+        pass
+    
+    #Testando se existe o botão das partidas de grupos, para então clicar nele
+    try:
+        fase_grupo = navegador.find_element('xpath', '//*[@id="content"]/div/div[3]/div[1]/div/div/div[1]/div[2]/div[2]').click()
+        time.sleep(1)
+    except:
+        pass
+
+    #Coletando o html
+    site_partidas = bs(navegador.page_source, 'html.parser')
+    
+    #Ano e sede da copa
+    info_copa_tm = site_partidas.find('title').get_text().strip()
+    qtde_letras_1 = len(info_copa_tm)
+    info_copa = info_copa_tm[:qtde_letras_1-1]
+    ano = info_copa[:4]
+    sede_copa_cup = info_copa.find('Cup')
+    sede_copa = info_copa[sede_copa_cup+4:]
+    
+    #Encontrando o bloco html que contém as partidas por data
+    todas_rodadas = site_partidas.find_all('div', attrs={'class': re.compile('fp-accordion-card_accordionCard_.*')})
+    
+    #Deixando em loop para coletar as informações no bloco maior e coletar o link
+    for todas_partidas in todas_rodadas:
+        
+        #Coletando Data ou Rodada
+        data_rodada = todas_partidas.find('p', attrs={re.compile('ff-mb-0 fp-accordion-card_accordionTitle_.*')})
+    
+        #Coletando o link da partida
+        partidas = todas_partidas.find_all('a')
+        
+        #Deixando em loop para agora coletar as informações de cada partida
+        for partida in partidas:
+            
+            #Detalhes da Partida - Data # Estádio # Grupo # Partida
+            caracteristicas = partida.find('div', attrs={'class': re.compile('d-none d-md-inline col fp-match-overview_tournamentDetails_.*')}).find_all('li')
+            detalhes_partida = '#'.join([detalhe.text for detalhe in caracteristicas])
+
+            #Selecoes e Placar da Partida
+            selecoes = partida.find_all('h4')
+            selecoes_partida = '#'.join([detalhe.text for detalhe in selecoes])
+        
+            #Coletar a informacao do jogo, se teve tempo extra ou penaltis
+            observacao_html = partida.find('p')
+        
+            #Coletar o link da partida
+            link = partida['href']
+        
+            placar_penalty = ''
+        
+            #Adicionando os dados numa tabela
+            if (observacao_html):
+                observacao = observacao_html.get_text().strip()
+                if '-' in observacao:
+                    placar_penalty_pos = observacao.find('-')
+                    placar_penalty = observacao[placar_penalty_pos-2:placar_penalty_pos+3]
+
+                else:
+                    placar_penalty = ''
+                
+                dados_partidas.append([detalhes_partida, data_rodada.text, selecoes_partida, observacao, placar_penalty, 'https://www.fifa.com'+link, info_copa, ano, sede_copa])
+            else:
+                dados_partidas.append([detalhes_partida, data_rodada.text, selecoes_partida, '', '', 'https://www.fifa.com'+link, info_copa, ano, sede_copa])
+            
+            links_partidas.append(['https://www.fifa.com'+link])          
+
+    #Testando se existe o botão das partidas da fase de eliminatorias, para então clicar nele
+    try:
+        fase_eliminatorias = navegador.find_element('xpath', '//*[@id="content"]/div/div[3]/div[1]/div/div/div[1]/div[2]/div[1]').click()
+
+        time.sleep(2)
+
+        #Coletando o html
+        site_partidas2 = bs(navegador.page_source, 'html.parser')
+
+        #Encontrando o bloco html que contém as partidas por data
+        todas_rodadas2 = site_partidas2.find_all('div', attrs={'class': re.compile('fp-accordion-card_accordionCard_.*')})
+
+        #Deixando em loop para coletar as informações no bloco maior e coletar o link
+        for todas_partidas2 in todas_rodadas2:
+
+            #Coletando Data ou Rodada
+            data_rodada2 = todas_partidas2.find('p', attrs={re.compile('ff-mb-0 fp-accordion-card_accordionTitle_.*')})
+
+            #Coletando o link da partida
+            partidas2 = todas_partidas2.find_all('a')
+
+            #Deixando em loop para agora coletar as informações de cada partida
+            for partida2 in partidas2:
+
+                #Detalhes da Partida - Data # Estádio # Grupo # Partida
+                caracteristicas2 = partida2.find('div', attrs={'class': re.compile('d-none d-md-inline col fp-match-overview_tournamentDetails_.*')}).find_all('li')
+                detalhes_partida2 = '#'.join([detalhe.text for detalhe in caracteristicas2])
+
+                #Selecoes e Placar da Partida
+                selecoes2 = partida2.find_all('h4')
+                selecoes_partida2 = '#'.join([detalhe.text for detalhe in selecoes2])
+
+                #Coletar a informacao do jogo, se teve tempo extra ou penaltis
+                observacao_html1 = partida2.find('p')
+
+                #Coletar o link da partida
+                link2 = partida2['href']
+
+                #Adicionando os dados numa tabela
+                if (observacao_html1):
+                    observacao2 = observacao_html1.get_text().strip()
+                    if '-' in observacao2:
+                        placar_penalty_pos2 = observacao2.find('-')
+                        placar_penalty1 = observacao2[placar_penalty_pos2-2:placar_penalty_pos2+3]
+
+                    else:
+                        placar_penalty1 = ''
+                    dados_partidas.append([detalhes_partida2, data_rodada2.text, selecoes_partida2, observacao2, placar_penalty1, 'https://www.fifa.com'+link2, info_copa, ano, sede_copa])               
+                else:
+                    dados_partidas.append([detalhes_partida2, data_rodada2.text, selecoes_partida2, '', '', 'https://www.fifa.com'+link2, info_copa, ano, sede_copa])
+
+                links_partidas.append(['https://www.fifa.com'+link2])
+
+    except:
+        pass
+
+tabela_link = pd.DataFrame(links_partidas, columns=['link'])
+#tabela_link.to_excel('links_partidas.xlsx', index=False)
+
+tabela = pd.DataFrame(dados_partidas, columns=['detalhes_partida', 'data_rodada', 'selecoes_placar', 'observacao', 'placar_penalty', 'link', 'copa', 'ano', 'sede'])
+#tabela.to_excel('dados_partidas.xlsx', index=False)
+
+#Criando uma lista para armazenar os dados
+dados_escalacao_partida = []
+
+for url_partida in links_partidas:
+    link_partida = str(url_partida)
+    qtde_letras = len(link_partida)
+    url_limpo = link_partida[2:qtde_letras-2].strip() 
+           
+    navegador.get(url_limpo)
+    time.sleep(1)
+    
+    #Testando se existe o botão da escalacao, para então clicar nele
+    escalacao_botao = navegador.find_element('xpath', '//*[@id="content"]/div/div[2]/div/div/div[1]/div[1]')
+    try:
+        escalacao_botao.click()
+    except:
+        pass
+
+    time.sleep(1)
+    
+    #Coletando o html
+    site_partidas = bs(navegador.page_source, 'html.parser')
+
+    #Ano e sede da copa
+    info_copa_partida = site_partidas.find('title').get_text().strip()
+    dois_pontos_info = info_copa_partida.find(':')
+    info_copa = info_copa_partida[:dois_pontos_info-1]
+    sede_copa_cup = info_copa.find('Cup')
+    sede_copa = info_copa[sede_copa_cup+4:]
+    ano = info_copa[:4]
+
+    #Bloco html das infos da partida
+    infos_partida = site_partidas.find('div', attrs={'class': re.compile('fp-result-board_resultRowOuter_.*')})
+    placar_html = infos_partida.find('div', attrs={'class': re.compile('fp-result-board_result__.*')})
+
+    #Extrair a equipe da casa
+    equipe_casa = infos_partida.find_all('h3')[1]
+
+    #Extrair o placar equipe da casa
+    placar_casa = placar_html.find('div', attrs={'class': re.compile('fp-result-board_score__.*')})
+
+    #Extrair a equipe visitante
+    equipe_visitante = infos_partida.find_all('h3')[-1]
+
+    #Extrair o placar equipe visitante
+    placar_visitante = placar_html.find_all('div')[-1]
+
+    #Extrair as infos da partida
+    info_partida2 = infos_partida.find('div', attrs={'class': re.compile('fp-result-board_detailsRow__.*')}).get_text().strip()
+    info_partida = info_partida2[18:]
+
+    #Concatenar a partida
+    partida = equipe_casa.text+' '+placar_casa.text+' - '+placar_visitante.text+' '+equipe_visitante.text
+    
+    #Extraindo a equipe da casa
+    escalacao_casa_html = site_partidas.find('div', attrs={'class': re.compile('col-md-6 fp-live-match-lineups_team__.* fp-live-match-lineups_homeTeam__.* fp-live-match-lineups_activeTab__.*')})
+    equipe_casa_esc = escalacao_casa_html.find('span', attrs={'class': re.compile('fp-live-match-team-players-details_clubName__.*')}).get_text().strip()
+
+    #Extraindo o nome do técnico
+    try:
+        tecnico_casa = escalacao_casa_html.find('div', attrs={'class': re.compile('fp-live-match-team-players-details_managerWrapper__.*')})
+        nome_tec_casa_html = tecnico_casa.find_all('span')
+        nome_tec_casa = ' '.join([nome_t.text for nome_t in nome_tec_casa_html])
+    except:
+        pass
+
+    #Encontrando o html de cada linha com o nome e numero do jogador
+    todos_jogadores_casa = escalacao_casa_html.find_all('div', attrs={'class': re.compile('fp-live-match-team-players-details_detailsRow__.*fp-live-match-team-players-details_homeTeam__.*')})
+
+    #Deixando em loop para coletar as informações de cada jogador
+    for jogador_casa in todos_jogadores_casa:
+
+        #Extrair o número da camiseta
+        camiseta_casa = jogador_casa.find('div', attrs={'class': re.compile('fp-live-match-team-players-details_shirtNumber__.*')})
+
+        #Extrair o nome do jogador
+        nome_html_casa = jogador_casa.find('div', attrs={'class': re.compile('fp-live-match-team-players-details_playerName__.*')})
+        nome_completo_casa = nome_html_casa.find_all('span')
+        nome_casa = ' '.join([nome_j.text for nome_j in nome_completo_casa])
+
+        #Extrair a info de capitao
+        capitao_html_casa = jogador_casa.find('div', attrs={'class': re.compile('fp-live-match-team-players-details_captainBadge_.*')})
+
+        try:
+            capitao_casa = capitao_html_casa.find('span')
+
+            dados_escalacao_partida.append([camiseta_casa.text, nome_casa, capitao_casa.text, nome_tec_casa, equipe_casa_esc, partida, info_partida, info_copa, ano, sede_copa])
+        except:
+            dados_escalacao_partida.append([camiseta_casa.text, nome_casa, '', nome_tec_casa, equipe_casa_esc, partida, info_partida, info_copa, ano, sede_copa])
+            
+    #Extraindo a equipe visitante
+    escalacao_vis_html = site_partidas.find('div', attrs={'class': re.compile('fp-live-match-team-players-details_awayTeam__.*')})
+    equipe_vis_esc = escalacao_vis_html.find('span', attrs={'class': re.compile('fp-live-match-team-players-details_clubName__.*')}).get_text().strip()
+
+    #Extraindo o nome do técnico
+    try:
+        tecnico_vis = escalacao_vis_html.find('div', attrs={'class': re.compile('fp-live-match-team-players-details_managerWrapper__.*')})
+        nome_tec_vis_html = tecnico_vis.find_all('span')
+        nome_tec_vis = ' '.join([nome_t.text for nome_t in nome_tec_vis_html])
+    except:
+        pass
+
+    #Encontrando o html de cada linha com o nome e numero do jogador
+    todos_jogadores_vis = escalacao_vis_html.find_all('div', attrs={'class': re.compile('fp-live-match-team-players-details_detailsRow__.*fp-live-match-team-players-details_awayTeam__.*')})
+
+    #Deixando em loop para coletar as informações de cada jogador
+    for jogador_vis in todos_jogadores_vis:
+
+        #Extrair o número da camiseta
+        camiseta_vis = jogador_vis.find('div', attrs={'class': re.compile('fp-live-match-team-players-details_shirtNumber__.*')})
+
+        #Extrair o nome do jogador
+        nome_html_vis = jogador_vis.find('div', attrs={'class': re.compile('fp-live-match-team-players-details_playerName__.*')})
+        nome_completo_vis = nome_html_vis.find_all('span')
+        nome_vis = ' '.join([nome_j.text for nome_j in nome_completo_vis])
+
+        #Extrair a info de capitao
+        capitao_html_vis = jogador_vis.find('div', attrs={'class': re.compile('fp-live-match-team-players-details_captainBadge_.*')})
+
+        try:
+            capitao_vis = capitao_html_vis.find('span')
+
+            dados_escalacao_partida.append([camiseta_vis.text, nome_vis, capitao_vis.text, nome_tec_vis, equipe_vis_esc, partida, info_partida, info_copa, ano, sede_copa])
+        except:
+            dados_escalacao_partida.append([camiseta_vis.text, nome_vis, '', nome_tec_vis, equipe_vis_esc, partida, info_partida, info_copa, ano, sede_copa])
+            
+tabela = pd.DataFrame(dados_escalacao_partida, columns=['num. camiseta', 'nome jogador', 'capitao', 'tecnico', 'equipe', 'partida', 'infos', 'copa', 'ano', 'sede_copa'])
+tabela.to_excel('dados_escalacao.xlsx', index=False)
+print('fim do codigo')
