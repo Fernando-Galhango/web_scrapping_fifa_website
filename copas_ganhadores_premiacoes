@@ -1,0 +1,162 @@
+from selenium import webdriver
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from bs4 import BeautifulSoup as bs
+import pandas as pd
+import time
+import re
+
+#Instalação do Web Driver (robô) para o Chrome
+servico = Service(ChromeDriverManager().install())
+
+#Para abrir o browser
+navegador = webdriver.Chrome(service=servico)
+
+#Acessando o site do Fifa
+navegador.get("https://www.fifa.com/tournaments/mens/worldcup")
+time.sleep(5)
+
+#Clicando no botão para aceitar os cookies
+try:
+    navegador.find_element('xpath', '//*[@id="onetrust-accept-btn-handler"]').click()
+    
+    time.sleep(2)
+except:
+    pass
+
+#Coletando o html
+site_copas = bs(navegador.page_source, 'html.parser')
+
+#Criando uma lista para armazenar os dados
+dados_copas = []
+links_copas = []
+links_teams = []
+links_partidas_copas = []
+
+#Bloco html com todas as copas
+infos_copas_html = site_copas.find('div', attrs={'class': 'fp-tournament-timeline_tournamentTimeline__u_StQ'})
+
+#Html de cada linha de informação
+infos_copas_linha = infos_copas_html.find_all('div', attrs={'class': 'row fp-tournament-timeline_tournamentTimelineRow__YW_QU'})
+
+#Deixando em loop para coletar as informações de cada linha
+for copa in infos_copas_linha:
+    
+    #Extraindo o ano da copa
+    ano_copa = copa.find('h3').get_text().strip()
+    
+    #Extraindo o link da copa
+    link_copa_html = copa.find('a')
+    link_copa = link_copa_html['href']
+    
+    #Extraindo o link do logo da copa
+    link_logo_html = copa.find('img', attrs={'class': 'ff-image_img__Gd2px'})
+    link_logo = link_logo_html['src']
+    
+    #Extraindo o nome da copa
+    nome_copa_tm = copa.find('h4').get_text().strip()
+    qtde_letras_1 = len(nome_copa_tm)
+    nome_copa = nome_copa_tm[:qtde_letras_1-1]
+    sede_copa_cup = nome_copa.find('Cup')
+    
+    #Extraindo a selação vencedora
+    vencedor_texto = copa.find('h6').get_text().strip()
+    dois_pontos_info = vencedor_texto.find(':')
+    vencedor = vencedor_texto[dois_pontos_info+2:]
+                
+    #Extrair a sede da copa
+    if (ano_copa) == '2022':
+        sede_copa = 'Russia'
+    else:
+        sede_copa = nome_copa[sede_copa_cup+4:]
+    
+    if (ano_copa) != '2025':
+        dados_copas.append([ano_copa, 'https://www.fifa.com'+link_copa, link_logo, nome_copa, vencedor, sede_copa])
+    
+    
+    if (ano_copa) == '2025' or (ano_copa) == '2022':
+        links_copas.append([])
+        links_teams.append([])
+        links_partidas_copas.append([])
+    else:
+        links_copas.append(['https://www.fifa.com'+link_copa, 'https://www.fifa.com'+link_copa+'/match-center', 'https://www.fifa.com'+link_copa+'/teams'])
+
+tabela_copas = pd.DataFrame(dados_copas, columns=['ano', 'link_copa', 'link_logo', 'nome_copa', 'vencedor', 'sede_copa'])
+tabela_copas.to_excel('dados_copas.xlsx', index=False)
+
+#Criando uma lista para armazenar os dados
+dados_ganhadores_copa = []
+dados_premiados_copa = []
+
+#Links da primeira página de cada copa
+url_copas = ['https://www.fifa.com/tournaments/mens/worldcup/2018russia', 'https://www.fifa.com/tournaments/mens/worldcup/2014brazil', 'https://www.fifa.com/tournaments/mens/worldcup/2010south-africa', 'https://www.fifa.com/tournaments/mens/worldcup/2006germany', 'https://www.fifa.com/tournaments/mens/worldcup/2002korea-japan', 'https://www.fifa.com/tournaments/mens/worldcup/1998france', 'https://www.fifa.com/tournaments/mens/worldcup/1994usa', 'https://www.fifa.com/tournaments/mens/worldcup/1990italy', 'https://www.fifa.com/tournaments/mens/worldcup/1986mexico', 'https://www.fifa.com/tournaments/mens/worldcup/1982spain', 'https://www.fifa.com/tournaments/mens/worldcup/1978argentina', 'https://www.fifa.com/tournaments/mens/worldcup/1974germany', 'https://www.fifa.com/tournaments/mens/worldcup/1970mexico', 'https://www.fifa.com/tournaments/mens/worldcup/1966england', 'https://www.fifa.com/tournaments/mens/worldcup/1962chile', 'https://www.fifa.com/tournaments/mens/worldcup/1958sweden', 'https://www.fifa.com/tournaments/mens/worldcup/1954switzerland', 'https://www.fifa.com/tournaments/mens/worldcup/1950brazil', 'https://www.fifa.com/tournaments/mens/worldcup/1938france', 'https://www.fifa.com/tournaments/mens/worldcup/1934italy', 'https://www.fifa.com/tournaments/mens/worldcup/1930uruguay']
+
+#Acessando o site do Fifa
+for url_copa in url_copas:
+    navegador.get(url_copa)
+    time.sleep(3)
+    
+    #Coletando o html
+    site_copa = bs(navegador.page_source, 'html.parser')
+    
+    #Bloco html com a info da copa
+    info_copa_html2 = site_copa.find('div', attrs={'class': 'fp-tournament-standing_hero__container__hdVvF'})
+
+    copa_html = info_copa_html2.find('div', attrs={'class': 'fp-tournament-standing_hero__text__Pb7Ef'})
+    ano_copa_sede_tm = copa_html.find('h6').get_text().strip()
+    qtde_letras_1 = len(ano_copa_sede_tm)
+    ano_copa_sede = ano_copa_sede_tm[:qtde_letras_1-1]
+    ano = ano_copa_sede[:4]
+    sede_copa_cup1 = ano_copa_sede.find('Cup')
+
+    #Extrair a sede da copa
+    if (ano) == '2022':
+        sede_copa1 = 'Russia'
+    else:
+        sede_copa1 = ano_copa_sede[sede_copa_cup1+4:]
+
+    #Bloco html com o "podium" da copa
+    podium_html = site_copa.find('div', attrs={'class': 'fp-tournament-standing_standingTable__XvNW4'})
+    posicao_podium_html = podium_html.find_all('a', attrs={'class': 'fp-tournament-standing_standingRow__GUUy_'})
+    
+    #Deixando em loop para coletar as informações de cada linha do podium
+    for lugar in posicao_podium_html:
+    
+        #Extraindo a posição
+        posicao = lugar.find('h2').get_text().strip()
+    
+        #Extraindo a descrição
+        descricao = lugar.find('h6').get_text().strip()
+    
+        #Extraindo a seleção
+        selecao = lugar.find('h3').get_text().strip()
+    
+        dados_ganhadores_copa.append([ano_copa_sede, posicao, descricao, selecao, ano, sede_copa1])
+        
+    
+    #Bloco html que contém todas as premiações
+    premiacao_bloco_html = site_copa.find('div', attrs={'class': 'row fp-tournament-award-badge-carousel_awardCarouselOuterRow__5SmGx'})
+
+    #Html que contém cada premiação
+    premiacao_html = premiacao_bloco_html.find_all('div', attrs={'class': 'fp-tournament-award-badge-carousel_awardsCarouselItem__5v5ua'})
+
+    #Deixando em loop para coletar as informações de cada premiacao
+    for premio in premiacao_html:
+    
+        #Extraindo a descrição
+        descricao_premio = premio.find('p', attrs={'class': 'fp-tournament-award-badge_awardName__a2jP2'}).get_text().strip()
+    
+        #Extraindo o jogador
+        jogador = premio.find('h4', attrs={'class': 'fp-tournament-award-badge_awardWinner__O1bxe'}).get_text().strip()
+    
+        #Extraindo a selecao
+        selecao_premio = premio.find('p', attrs={'class': 'fp-tournament-award-badge_awardWinnerCountry__octy_'}).get_text().strip()
+    
+        dados_premiados_copa.append([ano_copa_sede, descricao_premio, jogador, selecao_premio, ano, sede_copa1])
+
+tabela1 = pd.DataFrame(dados_ganhadores_copa, columns=['info_copa', 'posicao', 'descricao', 'selecao', 'ano', 'sede_copa1'])
+tabela1.to_excel('dados_ganhadores_copa.xlsx', index=False)
+
+tabela2 = pd.DataFrame(dados_premiados_copa, columns=['info_copa', 'descricao_premio', 'jogador', 'selecao_premio', 'ano', 'sede_copa1'])
+tabela2.to_excel('dados_premiados_copa.xlsx', index=False)
