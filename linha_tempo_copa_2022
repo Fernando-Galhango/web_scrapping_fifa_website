@@ -1,0 +1,249 @@
+from selenium import webdriver
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from bs4 import BeautifulSoup as bs
+import pandas as pd
+import time
+import re
+
+#Instalação do Web Driver (robô) para o Chrome
+servico = Service(ChromeDriverManager().install())
+
+#Para abrir o browser
+navegador = webdriver.Chrome(service=servico)
+
+#Acessando o site
+navegador.get("https://www.fifa.com/fifaplus/en/tournaments/mens/worldcup/qatar2022/scores-fixtures?country=BR&wtw-filter=ALL")
+time.sleep(5)
+
+#Clicando no botão para aceitar os cookies
+try:
+    navegador.find_element('xpath', '//*[@id="onetrust-accept-btn-handler"]').click()
+    
+    time.sleep(2)
+except:
+    pass
+
+#Coletando o html
+site_partidas = bs(navegador.page_source, 'html.parser')
+
+#Criando uma lista para armazenar os dados
+links_partidas = []
+
+#Bloco html com todas as partidas
+partidas_html_bloco = site_partidas.find('div', attrs={'class': re.compile('where-to-watch-section_containerCentered_.*')})
+
+#Encontrando cada bloco de data com as partidas
+datas_html_bloco = partidas_html_bloco.find_all('div', attrs={'class': re.compile('col-xl-12 col-lg-12 ff-pb-24 ff-text-blue-dark col-md-12 col-sm-12.*')})
+
+for data_partidas in datas_html_bloco:
+    
+    #Bloco das partidas de cada dia
+    partidasdodia_bloco_html = data_partidas.find_all('div', attrs={'class': re.compile('col-lg-12 col-md-6 col-sm-12.*')})
+    
+    for partida_html in partidasdodia_bloco_html:
+        
+        ##Extraindo o link da partida
+        link_partida_html = partida_html.find('a')
+        link_partida = link_partida_html['href']
+        
+        #Juntando as informações
+        links_partidas.append(['https://www.fifa.com'+link_partida])
+        
+time.sleep(2)
+print('prosseguir')
+
+#Criando uma lista para armazenar os dados
+infos_linha_tempo = []
+
+for url_partidas in links_partidas:
+    link_partida = str(url_partidas)
+    qtde_letras = len(link_partida)
+    url_limpo = link_partida[2:qtde_letras-2].strip()
+    
+    navegador.get(url_limpo)
+    time.sleep(6)
+    
+    #Clicando no botão mostrar as infos e a linha do tempo da partida
+    try:
+        navegador.find_element('xpath', '//*[@id="root"]/div/main/div/div[3]/div/div[1]/div/div[1]').click()
+
+    except:
+        pass
+
+    try:
+        navegador.find_element('xpath', '//*[@id="root"]/main/div/div[3]/div/div[1]/div/div[1]').click()
+
+    except:
+        pass
+
+    time.sleep(6)
+
+    #Coletando o html
+    site_linha_tempo_infos = bs(navegador.page_source, 'html.parser')
+
+    #Extraindo o bloco html do cabeçalho
+    cabecalho_bloco_html = site_linha_tempo_infos.find('section', attrs={'class': re.compile('match-details-new-header-section_RelativeContainer_.*')})
+
+    #Extraindo o grupo
+    grupo_html = cabecalho_bloco_html.find('div', attrs={'class': re.compile('match-details-header-main-component_MatchDate__1sw6I d-flex.*')})
+    grupo = grupo_html.find('p')
+
+    #Extraindo a data e hora da partida
+    data_hora_html = cabecalho_bloco_html.find('div', attrs={'class': re.compile('match-details-header-main-component_MatchDate__1sw6I match-details-header-main-component.*')})
+    data_hora = data_hora_html.find('p')
+
+    #Bloco html com a partida
+    partida_html = cabecalho_bloco_html.find('div', attrs={'class': 'container d-flex justify-content-center align-items-center'})
+
+    #Extraindo o nome das selecoes
+    selecao_casa_html = partida_html.find_all('a')[0]
+    selecao_casa = selecao_casa_html.get_text().strip()
+    selecao_vis_html = partida_html.find_all('a')[-1]
+    selecao_vis = selecao_vis_html.get_text().strip()
+
+    #Extraindo o placar
+    placar = partida_html.find('span', attrs={'class': re.compile('show-match-score_BigFont__qRZ5P show-match-score_BiggerFont__2lUIG show-match-score_score_.*')})
+
+    #Bloco html com as infos
+    infos_html_bloco1 = site_linha_tempo_infos.find('div', attrs={'class': 'ff-p-16 ff-pt-lg-8 ff-pt-md-16 ff-pt-lg-8'})
+    infos_html_bloco = infos_html_bloco1.find('div', attrs={'class': 'row ff-mt-12 ff-mt-md-24 ff-mt-lg-48 d-flex justify-content-center'})
+    infos_html = infos_html_bloco.find('div', attrs={'class': re.compile('d-none d-md-flex match-details-overview-info_overviewContainer_.*')})
+
+    #Extraindo a data da partida
+    data_partida_html = infos_html.find_all('div', attrs={'class': re.compile('match-details-overview-info_infoContainer_.*')})[1]
+    data_partida = data_partida_html.find('div', attrs={'class': re.compile('match-details-overview-info_info_.*')})
+
+    #Extraindo o estádio da partida
+    estadio_partida = infos_html.find_all('div', attrs={'class': re.compile('match-details-overview-info_info_.*')})[2]
+    estadio = estadio_partida.get_text().strip()
+
+    #Encontrando o bloco html que contém a linha de tempo da partida
+    linha_tempo_html = infos_html_bloco1
+
+    #Encontrando as linhas que contém cada informação de eventos da partida
+    evento_bloco_html = linha_tempo_html.find_all('div', attrs={'class': re.compile('row justify-content-md-cente.*')})
+
+    for evento_linha_html in evento_bloco_html:
+
+        #Verificando se na linha contém o tempo do evento
+        try:
+            tempo_html_bloco = evento_linha_html.find('div', attrs={'class': re.compile('col-1 d-flex justify-content-cente.*')})
+            tempo_html = tempo_html_bloco.find('div', attrs={'class': re.compile('tabs-component-match-overview_timeBox_.*d-flex align-items-center justify-content-center')})
+            tempo = tempo_html.get_text().strip()
+        except:
+            tempo = ''
+
+        #Buscando a parte do html com as informações da seleção da casa
+        jogador_evento_casa_html = evento_linha_html.find('div', attrs={'class': re.compile('.*ol d-flex justify-content-end align-items-center')})
+
+        #Tentando verificar se existe informação na linha
+
+        try: 
+
+            #Extraindo o jogador da seleção da casa
+            jogador_casa_html = jogador_evento_casa_html.find('div', attrs={'class': re.compile('tabs-component-match-overview_playerNameLeft_.*')})
+            jogador_casa = jogador_casa_html.find('span', attrs={'class': 'd-none d-md-block'}).get_text().strip()
+            jogador = jogador_casa
+            selecao = selecao_casa
+
+            #Teantando extrair o html do evento
+            evento_casa_html = jogador_evento_casa_html.find('div', attrs={'class': 'ff-ml-8 d-flex align-items-center'})
+
+            #Tentando extrair o evento cartão amarelo do jogador
+            try:
+                cartao_amarelo_html = evento_casa_html.find('div', attrs={'class': re.compile('tabs-component-match-overview_yellowCard_.*')})
+                if cartao_amarelo_html is not None:
+                    evento = 'Cartão Amarelo' 
+            except:
+                pass
+
+            #Tentando extrair o evento cartão vermelho do jogador
+            try:
+                cartao_vermelho_html = evento_casa_html.find('div', attrs={'class': re.compile('match-details-lineup-tab-component_redCard_.*')})
+                if cartao_vermelho_html is not None:
+                    evento = 'Cartão Vermelho' 
+            except:
+                pass
+
+            #Tentando extrair o evento substituição do jogador
+            try:
+                substituicao_html = evento_casa_html.find('svg', attrs={'viewbox': re.compile('0 0 1.* 8'), 'height': '8'})
+                if substituicao_html is not None:
+                    evento = 'Substituição' 
+            except:
+                pass
+
+            #Tentando extrair o evento gol do jogador
+            try:
+                gol_html = evento_casa_html.find('svg', attrs={'viewbox': '0 0 16 16', 'height': '16'})
+                if gol_html is not None:
+                    evento = 'Gol' 
+            except:
+                pass
+
+            #Juntando as informações na tabela
+            infos_linha_tempo.append([grupo.text, data_hora.text, selecao_casa, placar.text, selecao_vis, estadio, jogador, tempo, evento, selecao])
+
+        except:
+            pass
+
+        #Buscando a parte do html com as informações da seleção visitante
+        jogador_evento_vis_html = evento_linha_html.find('div', attrs={'class': re.compile('.*ol d-flex justify-content-start align-items-center')})
+
+        #Tentando verificar se existe informação na linha
+        try:
+
+            #Extraindo o jogador da seleção visitante
+            jogador_vis_html = jogador_evento_vis_html.find('div', attrs={'class': re.compile('tabs-component-match-overview_playerNameRight_.*')})
+            jogador_vis = jogador_vis_html.find('span', attrs={'class': 'd-none d-md-block'}).get_text().strip()
+            jogador = jogador_vis
+            selecao = selecao_vis
+
+            #Teantando extrair o html do evento
+            evento_vis_html = jogador_evento_vis_html.find('div', attrs={'class': 'ff-mr-8 d-flex align-items-center'})
+
+            #Tentando extrair o evento cartão amarelo do jogador
+            try:
+                cartao_amarelo_html = evento_vis_html.find('div', attrs={'class': re.compile('tabs-component-match-overview_yellowCard_.*')})
+                if cartao_amarelo_html is not None:
+                    evento = 'Cartão Amarelo' 
+            except:
+                pass
+
+            #Tentando extrair o evento cartão vermelho do jogador
+            try:
+                cartao_vermelho_html = evento_vis_html.find('div', attrs={'class': re.compile('match-details-lineup-tab-component_redCard_.*')})
+                if cartao_vermelho_html is not None:
+                    evento = 'Cartão Vermelho' 
+            except:
+                pass
+
+            #Tentando extrair o evento substituição do jogador
+            try:
+                substituicao_html = evento_vis_html.find('svg', attrs={'viewbox': re.compile('0 0 1.* 8'), 'height': '8'})
+                if substituicao_html is not None:
+                    evento = 'Substituição' 
+            except:
+                pass
+
+            #Tentando extrair o evento gol do jogador
+            try:
+                gol_html = evento_vis_html.find('svg', attrs={'viewbox': '0 0 16 16', 'height': '16'})
+                if gol_html is not None:
+                    evento = 'Gol' 
+            except:
+                pass
+
+            #Juntando as informações na tabela
+            infos_linha_tempo.append([grupo.text, data_hora.text, selecao_casa, placar.text, selecao_vis, estadio, jogador, tempo, evento, selecao])
+
+        except:
+            pass
+                
+time.sleep(3)      
+print('prosseguir')
+
+tabela = pd.DataFrame(infos_linha_tempo, columns=['grupo', 'data_hora', 'selecao_casa', 'placar', 'selecao_vis', 'estadio', 'nome_jogador', 'tempo', 'evento', 'selecao'])
+tabela.to_excel('linha_tempo_partidas_2022.xlsx', index=False)
