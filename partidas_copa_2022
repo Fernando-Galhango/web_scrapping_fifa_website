@@ -1,0 +1,223 @@
+from selenium import webdriver
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from bs4 import BeautifulSoup as bs
+import pandas as pd
+import time
+import re
+
+#Instalação do Web Driver (robô) para o Chrome
+servico = Service(ChromeDriverManager().install())
+
+#Para abrir o browser
+navegador = webdriver.Chrome(service=servico)
+
+#Acessando o site
+navegador.get("https://www.fifa.com/fifaplus/en/tournaments/mens/worldcup/qatar2022/scores-fixtures?country=BR&wtw-filter=ALL")
+time.sleep(5)
+
+#Clicando no botão para aceitar os cookies
+try:
+    navegador.find_element('xpath', '//*[@id="onetrust-accept-btn-handler"]').click()
+    
+    time.sleep(2)
+except:
+    pass
+
+#Coletando o html
+site_partidas = bs(navegador.page_source, 'html.parser')
+
+#Criando uma lista para armazenar os dados
+dados_partidas = []
+links_partidas = []
+
+#Bloco html com todas as partidas
+partidas_html_bloco = site_partidas.find('div', attrs={'class': re.compile('where-to-watch-section_containerCentered_.*')})
+
+#Encontrando cada bloco de data com as partidas
+datas_html_bloco = partidas_html_bloco.find_all('div', attrs={'class': re.compile('col-xl-12 col-lg-12 ff-pb-24 ff-text-blue-dark col-md-12 col-sm-12.*')})
+
+for data_partidas in datas_html_bloco:
+
+    #Extraindo a data das partidas
+    data = data_partidas.find('div', attrs={'class': re.compile('matches-container_title_.*')})
+    
+    #Bloco das partidas de cada dia
+    partidasdodia_bloco_html = data_partidas.find_all('div', attrs={'class': re.compile('col-lg-12 col-md-6 col-sm-12.*')})
+    
+    for partida_html in partidasdodia_bloco_html:
+        
+        #Extraindo o link da partida
+        link_partida_html = partida_html.find('a')
+        link_partida = link_partida_html['href']
+        
+        #Extraindo o grupo
+        grupo = partida_html.find('div', attrs={'class': re.compile('match-component_wtwStadium_.*')})
+        
+        #Extraindo os nomes das selecoes
+        selecao_casa = partida_html.find_all('span', attrs={'class': re.compile('match-component_wtwTeamName_*')})[0]
+        selecao_vis = partida_html.find_all('span', attrs={'class': re.compile('match-component_wtwTeamName_*')})[-1]
+        
+        #Extraindo o placar
+        placar = partida_html.find('span', attrs={'class': re.compile('show-match-score_score_*')})
+        
+        #Juntando as informações
+        dados_partidas.append([data.text, 'https://www.fifa.com'+link_partida, grupo.text, selecao_casa.text, placar.text, selecao_vis.text])
+        links_partidas.append(['https://www.fifa.com'+link_partida])
+        
+#tabela = pd.DataFrame(dados_partidas, columns=['data', 'link_partida', 'grupo', 'selecao_casa', 'placar', 'selecao_vis'])
+#tabela.to_excel('dados_partidas_2022.xlsx', index=False)
+time.sleep(2)
+print('prosseguir')
+
+#Criando uma lista para armazenar os dados
+infos_partida = []
+
+for url_partidas in links_partidas:
+    link_partida = str(url_partidas)
+    qtde_letras = len(link_partida)
+    url_limpo = link_partida[2:qtde_letras-2].strip()
+    
+    navegador.get(url_limpo)
+    time.sleep(3)
+    
+    #Clicando no botão mostrar as infos e a linha do tempo da partida
+    try:
+        navegador.find_element('xpath', '//*[@id="root"]/div/main/div/div[3]/div/div[1]/div/div[1]').click()
+
+    except:
+        pass
+    
+    try:
+        navegador.find_element('xpath', '//*[@id="root"]/main/div/div[3]/div/div[1]/div/div[1]').click()
+
+    except:
+        pass
+    
+    time.sleep(4)
+
+    #Coletando o html
+    site_linha_tempo_infos = bs(navegador.page_source, 'html.parser')
+    
+    #Extraindo o bloco html do cabeçalho
+    cabecalho_bloco_html = site_linha_tempo_infos.find('section', attrs={'class': re.compile('match-details-new-header-section_RelativeContainer_.*')})
+    
+    #Extraindo o grupo
+    grupo_html = cabecalho_bloco_html.find('div', attrs={'class': re.compile('match-details-header-main-component_MatchDate__1sw6I d-flex.*')})
+    grupo = grupo_html.find('p')
+
+    #Extraindo a data e hora da partida
+    data_hora_html = cabecalho_bloco_html.find('div', attrs={'class': re.compile('match-details-header-main-component_MatchDate__1sw6I match-details-header-main-component.*')})
+    data_hora = data_hora_html.find('p')
+
+    #Bloco html com a partida
+    partida_html = cabecalho_bloco_html.find('div', attrs={'class': 'container d-flex justify-content-center align-items-center'})
+
+    #Extraindo o nome das selecoes
+    selecao_casa_html = partida_html.find_all('a')[0]
+    selecao_casa = selecao_casa_html.get_text().strip()
+    selecao_vis_html = partida_html.find_all('a')[-1]
+    selecao_vis = selecao_vis_html.get_text().strip()
+
+    #Extraindo o placar
+    placar = partida_html.find('span', attrs={'class': re.compile('show-match-score_BigFont__qRZ5P show-match-score_BiggerFont__2lUIG show-match-score_score_.*')})
+
+    #Bloco html com as infos
+    infos_html_bloco1 = site_linha_tempo_infos.find('div', attrs={'class': 'ff-p-16 ff-pt-lg-8 ff-pt-md-16 ff-pt-lg-8'})
+    infos_html_bloco = infos_html_bloco1.find('div', attrs={'class': 'row ff-mt-12 ff-mt-md-24 ff-mt-lg-48 d-flex justify-content-center'})
+    infos_html = infos_html_bloco.find('div', attrs={'class': re.compile('d-none d-md-flex match-details-overview-info_overviewContainer_.*')})
+
+    #Extraindo a data da partida
+    data_partida_html = infos_html.find_all('div', attrs={'class': re.compile('match-details-overview-info_infoContainer_.*')})[1]
+    data_partida = data_partida_html.find('div', attrs={'class': re.compile('match-details-overview-info_info_.*')})
+
+    #Extraindo o estádio da partida
+    estadio_partida = infos_html.find_all('div', attrs={'class': re.compile('match-details-overview-info_info_.*')})[2]
+
+    #Extraindo a cidade da partida
+    cidade_partida = infos_html.find_all('div', attrs={'class': re.compile('match-details-overview-info_info_.*')})[3]
+
+    #Extraindo o arbitro da partida
+    arbitro_partida = infos_html.find_all('div', attrs={'class': re.compile('match-details-overview-info_info_.*')})[4]
+
+    #Extraindo o arbitro assistente 1 da partida
+    arbitro_ass1_partida = infos_html.find_all('div', attrs={'class': re.compile('match-details-overview-info_info_.*')})[5]
+
+    #Extraindo o arbitro assistente 2 da partida
+    arbitro_ass2_partida = infos_html.find_all('div', attrs={'class': re.compile('match-details-overview-info_info_.*')})[6]
+
+    #Extraindo o quarto oficial da partida
+    quarto_oficial_partida = infos_html.find_all('div', attrs={'class': re.compile('match-details-overview-info_info_.*')})[7]
+
+    #Extraindo o público da partida
+    publico_partida = infos_html.find_all('div', attrs={'class': re.compile('match-details-overview-info_info_.*')})[8]
+
+    #Tentando extrair os marcadores da seleção da casa
+    try:
+        marcadores_html = cabecalho_bloco_html.find('div', attrs={'class': re.compile('match-details-new-header-section_hideInFade_.*')})
+        marcadores_casa_html = marcadores_html.find('div', attrs={'class': re.compile('d-flex justify-content-center flex-column match-details-header-events-component_events_.*match-details-header-events-component_home_.*')})
+        marcador_casa_html = marcadores_casa_html.find_all('div', attrs={'class': 'd-flex justify-content-end align-items-center ff-mt-4 ff-mt-lg-8'})
+
+        for marcador_casa in marcador_casa_html:
+
+            #Verificando se houve gol contra
+            try:
+                gol_info_casa = marcador_casa.find('div', attrs={'class': re.compile('match-details-header-events-component_ownGoal_.*')}).get_text().strip()
+                tempo_gol_casa = marcador_casa.find('div', attrs={'class': re.compile('match-details-header-events-component_timeBox_.*d-flex align-items-center justify-content-center')}).get_text().strip()
+                nome_marcador_casa_html = marcador_casa.find('div', attrs={'class': re.compile('match-details-header-events-component_playerNameLeft_.*')})
+                nome_marcador_casa = marcador_casa.find('span', attrs={'class': 'd-none d-md-block'}).get_text().strip()
+                nome_marcador = nome_marcador_casa+'-'+selecao_casa
+                
+                #Juntando as informações
+                infos_partida.append([grupo.text, data_hora.text, selecao_casa, placar.text, selecao_vis, data_partida.text, estadio_partida.text, cidade_partida.text, arbitro_partida.text, arbitro_ass1_partida.text, arbitro_ass2_partida.text, quarto_oficial_partida.text, publico_partida.text, nome_marcador, tempo_gol_casa, gol_info_casa])
+    
+            except:
+                tempo_gol_casa = marcador_casa.find('div', attrs={'class': re.compile('match-details-header-events-component_timeBox_.*d-flex align-items-center justify-content-center')}).get_text().strip()
+                nome_marcador_casa_html = marcador_casa.find('div', attrs={'class': re.compile('match-details-header-events-component_playerNameLeft_.*')})
+                nome_marcador_casa = marcador_casa.find('span', attrs={'class': 'd-none d-md-block'}).get_text().strip()
+                nome_marcador = nome_marcador_casa+'-'+selecao_casa
+                
+                #Juntando as informações
+                infos_partida.append([grupo.text, data_hora.text, selecao_casa, placar.text, selecao_vis, data_partida.text, estadio_partida.text, cidade_partida.text, arbitro_partida.text, arbitro_ass1_partida.text, arbitro_ass2_partida.text, quarto_oficial_partida.text, publico_partida.text, nome_marcador, tempo_gol_casa, ''])
+    except:
+        pass
+    
+    #Tentando extrair os marcadores da seleção visitante
+    try:
+        marcadores_html = cabecalho_bloco_html.find('div', attrs={'class': re.compile('match-details-new-header-section_hideInFade_.*')})
+        marcadores_vis_html = marcadores_html.find('div', attrs={'class': re.compile('d-flex justify-content-center flex-column match-details-header-events-component_events_.*match-details-header-events-component_away_.*')})
+        marcador_vis_html = marcadores_vis_html.find_all('div', attrs={'class': 'd-flex justify-content-start align-items-center ff-mt-4 ff-mt-lg-8'})
+
+        for marcador_vis in marcador_vis_html:
+
+            #Verificando se houve gol contra
+            try:
+                gol_contra_vis = marcador_vis.find('div', attrs={'class': re.compile('match-details-header-events-component_ownGoal_.*')}).get_text().strip()
+                tempo_gol_vis = marcador_vis.find('div', attrs={'class': re.compile('match-details-header-events-component_timeBox_.*d-flex align-items-center justify-content-center')}).get_text().strip()
+                nome_marcador_vis_html = marcador_vis.find('div', attrs={'class': re.compile('match-details-header-events-component_playerNameLeft_.*')})
+                nome_marcador_vis = marcador_vis.find('span', attrs={'class': 'd-none d-md-block'}).get_text().strip()
+                nome_marcador = nome_marcador_vis+'-'+selecao_vis
+                
+                #Juntando as informações
+                infos_partida.append([grupo.text, data_hora.text, selecao_casa, placar.text, selecao_vis, data_partida.text, estadio_partida.text, cidade_partida.text, arbitro_partida.text, arbitro_ass1_partida.text, arbitro_ass2_partida.text, quarto_oficial_partida.text, publico_partida.text, nome_marcador, tempo_gol_vis, gol_contra_vis])
+                
+            except:
+                tempo_gol_vis = marcador_vis.find('div', attrs={'class': re.compile('match-details-header-events-component_timeBox_.*d-flex align-items-center justify-content-center')}).get_text().strip()
+                nome_marcador_vis_html = marcador_vis.find('div', attrs={'class': re.compile('match-details-header-events-component_playerNameLeft_.*')})
+                nome_marcador_vis = marcador_vis.find('span', attrs={'class': 'd-none d-md-block'}).get_text().strip()
+                nome_marcador = nome_marcador_vis+'-'+selecao_vis
+                
+                #Juntando as informações
+                infos_partida.append([grupo.text, data_hora.text, selecao_casa, placar.text, selecao_vis, data_partida.text, estadio_partida.text, cidade_partida.text, arbitro_partida.text, arbitro_ass1_partida.text, arbitro_ass2_partida.text, quarto_oficial_partida.text, publico_partida.text, nome_marcador, tempo_gol_vis, ''])
+    
+    except:
+        
+        #Juntando as informações
+        infos_partida.append([grupo.text, data_hora.text, selecao_casa, placar.text, selecao_vis, data_partida.text, estadio_partida.text, cidade_partida.text, arbitro_partida.text, arbitro_ass1_partida.text, arbitro_ass2_partida.text, quarto_oficial_partida.text, publico_partida.text, '', '', ''])
+    
+time.sleep(1)
+print('prosseguir')
+
+tabela = pd.DataFrame(infos_partida, columns=['grupo', 'data_hora', 'selecao_casa', 'placar', 'selecao_vis', 'data_partida', 'estadio_partida', 'cidade_partida', 'arbitro_partida', 'arbitro_ass1_partida', 'arbitro_ass2_partida', 'quarto_oficial_partida', 'publico_partida', 'marcador', 'tempogol', 'golinfo'])
+tabela.to_excel('dados_partidas_2022_rev_01.xlsx', index=False)
