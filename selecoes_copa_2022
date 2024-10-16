@@ -1,0 +1,217 @@
+from selenium import webdriver
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from bs4 import BeautifulSoup as bs
+import pandas as pd
+import time
+import re
+
+#Instalação do Web Driver (robô) para o Chrome
+servico = Service(ChromeDriverManager().install())
+
+#Para abrir o browser
+navegador = webdriver.Chrome(service=servico)
+
+#Acessando o site
+navegador.get("https://www.fifa.com/fifaplus/en/tournaments/mens/worldcup/qatar2022/teams")
+time.sleep(5)
+
+#Clicando no botão para aceitar os cookies
+try:
+    navegador.find_element('xpath', '//*[@id="onetrust-accept-btn-handler"]').click()
+    
+    time.sleep(2)
+except:
+    pass
+
+#Coletando o html
+site_copas = bs(navegador.page_source, 'html.parser')
+
+#Criando uma lista para armazenar os dados
+dados_selecoes = []
+links_selecoes = []
+
+#Bloco html com todas as copas
+selecoes_html = site_copas.find('div', attrs={'class': 'container'})
+
+#Html de cada linha de informação
+selecao_bloco = selecoes_html.find_all('a')
+
+#Deixando em loop para coletar as informações de cada linha
+for selecao in selecao_bloco:
+    
+    #Extraindo o nome da selecao
+    selecao_nome = selecao.find('div', attrs={'class': re.compile('flag-with-info_flagCountry_.*')})
+    
+    #Extraindo o link da selecao
+    link_selecao_html = selecao.find('a')
+    link_selecao = selecao['href']
+    
+    #Extraindo o link da bandeira
+    link_bandeira_html = selecao.find('div', attrs={'class': re.compile('flag-with-info_flag_.*')}).find('img')
+    link_bandeira = link_bandeira_html['src']
+    
+    #Juntando as informações
+    dados_selecoes.append([selecao_nome.text, 'https://www.fifa.com'+link_selecao, link_bandeira])
+    links_selecoes.append(['https://www.fifa.com'+link_selecao])
+
+#Criando uma lista para armazenar os dados
+dados_jogadores = []
+
+for url_equipes in links_selecoes:
+    link_equipe = str(url_equipes)
+    qtde_letras = len(link_equipe)
+    url_limpo = link_equipe[2:qtde_letras-2].strip() 
+           
+    navegador.get(url_limpo)
+    time.sleep(2)
+    
+    #Coletando o html
+    site_equipes = bs(navegador.page_source, 'html.parser')
+    
+    #Testando o botão da escalacao, para então clicar nele
+    timeline_botao = navegador.find_element('xpath', '//*[@id="root"]/main/div/section[2]/div/div/div/a[4]')
+    try:
+        timeline_botao.click()
+    except:
+        pass
+    
+    time.sleep(2)
+
+    #Coletando o html
+    site_esc = bs(navegador.page_source, 'html.parser')
+    
+    #Extraindo o nome da seleção
+    nome_selecao_bloco = site_esc.find('div', attrs={'class': re.compile('title-banner-section_title_.*')})
+    nome_selecao = nome_selecao_bloco.find_all('span')[1]
+    
+    #Bloco html com a escalacao
+    escalacao_bloco = site_esc.find('section', attrs={'class': 'ff-mt-24 ff-mt-lg-40 ff-bg-sand'})
+    
+    #Encontrando o bloco html que contém o técnico
+    tecnico_html_bloco1 = escalacao_bloco.find_all('div', attrs={'class': re.compile('entire-squad_container__.*')})[-1]
+    tecnico_html_bloco = tecnico_html_bloco1.find('div', attrs={'class': re.compile('manager-badge-card_badgeCard_.*entire-squad_card_.*')})
+    tecnico_nome_html = tecnico_html_bloco.find('div', attrs={'class': re.compile('manager-badge-card_managerInfo_.*')})
+    
+    #Extraindo o nome do técnico
+    primeiro_nome_tec_bloco = tecnico_nome_html.find('div', attrs={'class': re.compile('manager-badge-card_managerFirstname_.*')})
+    primeiro_nome_tec = primeiro_nome_tec_bloco.find_all('span')[1]
+    ultimo_nome_tec_bloco = tecnico_nome_html.find('div', attrs={'class': re.compile('manager-badge-card_managerSurname_.*')})
+    try:
+        ultimo_nome_tec = ultimo_nome_tec_bloco.find_all('span')[1]
+    except:
+        ultimo_nome_tec = ultimo_nome_tec_bloco.find('span')
+                
+    try:
+        nome_tecnico = primeiro_nome_tec.text+" "+ultimo_nome_tec.text
+    except:
+        nome_tecnico = primeiro_nome_tec.text
+    
+    #Html de cada posição
+    posicao_bloco = escalacao_bloco.find_all('div', attrs={'class': re.compile('entire-squad_container__.*')})
+    
+    #Deixando em loop para coletar as informações de cada linha
+    for bloco_posicao in posicao_bloco:
+
+        #Extraindo a posição
+        posicao = bloco_posicao.find('div', attrs={'class': re.compile('entire-squad_title_.*')})
+        
+        #Buscando o bloco html de cada jogador        
+        dados_jogador = bloco_posicao.find_all('div', attrs={'class': re.compile('player-badge-card_badgeCard_.*entire-squad_card_.*')})
+
+        #Deixando em loop para coletar as informações de cada linha
+        for jogador in dados_jogador:
+
+            #Extraindo o nome do jogador
+            primeiro_nome_bloco = jogador.find('div', attrs={'class': re.compile('player-badge-card_playerFirstname_.*')})
+            primeiro_nome = primeiro_nome_bloco.find_all('span')[1]
+            ultimo_nome_bloco = jogador.find('div', attrs={'class': re.compile('player-badge-card_playerSurname_.*')})
+            try:
+                ultimo_nome = ultimo_nome_bloco.find_all('span')[1]
+            except:
+                ultimo_nome = ultimo_nome_bloco.find('span')
+                
+            try:
+                nome_jogador = primeiro_nome.text+" "+ultimo_nome.text
+            except:
+                nome_jogador = primeiro_nome.text
+
+            #Juntando as informações
+            dados_jogadores.append([posicao.text, nome_jogador, nome_selecao.text, nome_tecnico])
+        
+tabela_jogadores = pd.DataFrame(dados_jogadores, columns=['Posicao', 'Nome', 'selecao', 'tecnico'])
+tabela_jogadores.to_excel('dados_jogadores_2022.xlsx', index=False)
+
+#Criando uma lista para armazenar os dados
+dados_escalacao_selecao = []
+
+#Limpando a url das aspas e deixando um loop
+for url_escalacao in links_escalacoes:
+    link_escalacao = str(url_escalacao)
+    qtde_letras = len(link_escalacao)
+    url_limpo2 = link_escalacao[2:qtde_letras-2].strip()
+    
+    navegador.get(url_limpo2)
+    time.sleep(2)
+    
+    #Testando o botão da escalacao, para então clicar nele
+    timeline_botao = navegador.find_element('xpath', '//*[@id="root"]/main/div/section[2]/div/div/div/a[4]')
+    try:
+        timeline_botao.click()
+    except:
+        pass
+
+    #Coletando o html
+    site_esc = bs(navegador.page_source, 'html.parser')
+    
+    #Bloco html com a escalacao
+    escalacao_bloco = site_esc.find('section', attrs={'class': 'ff-mt-24 ff-mt-lg-40 ff-bg-sand'})
+
+    #Extraindo a edição da copa
+    ano_copa_sede_tm = info_copa_html3.find('h1', attrs={'class': re.compile('ff-hero_noTransform_.*')}).get_text().strip()
+    qtde_letras_1 = len(ano_copa_sede_tm)
+    ano_copa_sede = ano_copa_sede_tm[:qtde_letras_1-1]
+    ano = ano_copa_sede[:4]
+    sede_copa_cup1 = ano_copa_sede.find('Cup')
+    sede_copa1 = ano_copa_sede[sede_copa_cup1+4:]
+    
+    #Extraindo a selecao
+    try:
+        selecao_html = site_esc.find('div', attrs={'class': re.compile('row fp-team-banner_BannerContainer_.*')})
+        selecao = selecao_html.find('h1').get_text().strip()
+    except:
+        selecao_html1 = site_esc.find('div', attrs={'class': re.compile('fp-squad-player-card_flag_.*')})
+        selecao_alt = selecao_html1.find('img')
+        selecao = selecao_alt['title']
+        
+    #Bloco html com a escalação da seleção
+    escalacao_selecao_html = site_esc.find('div', attrs={'class': re.compile('fp-squad_squadCardsContainer_.*')})
+
+    #Html de cada jogador
+    jogador_html = escalacao_selecao_html.find_all('div', attrs={'class': re.compile('fp-squad-player-card_playerCard_.*')})
+    
+    #Deixando em loop para coletar os dados de cada jogador
+    for jogador in jogador_html:
+
+        #Extraindo o nome do jogador
+        try:
+            nome_jogador = jogador.find('span', attrs={'class': re.compile('fp-squad-player-card_.*Name.*')}).get_text().strip()
+        except:
+            nome_jogador_html = jogador.find_all('div', attrs={'class': re.compile('fp-squad-player-card_.*Name.*')})
+            nome_jogador = ' '.join([nome.text for nome in nome_jogador_html])
+
+        #Extraindo o numero da camiseta
+        numero_camiseta = jogador.find('div', attrs={'class': re.compile('fp-squad-player-card_jerseyNumber_.*')}).get_text().strip()
+
+        #Extraindo a posição do jogador
+        posicao = jogador.find('div', attrs={'class': re.compile('fp-squad-player-card_position_.*')}).get_text().strip()
+        
+        #Adicionando os dados na tabela
+        dados_escalacao_selecao.append([ano, sede_copa1, ano_copa_sede, selecao, nome_jogador, posicao, numero_camiseta])
+        
+    time.sleep(1)
+        
+tabela1 = pd.DataFrame(dados_escalacao_selecao, columns=['ano', 'sede_copa', 'info_copa', 'selecao', 'jogador', 'posicao', 'numero_camiseta'])
+tabela1.to_excel('dados_escalacao_selecao.xlsx', index=False)
+print('fim do código')
