@@ -1,0 +1,183 @@
+from selenium import webdriver
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from bs4 import BeautifulSoup as bs
+import pandas as pd
+import time
+import re
+
+#Instalação do Web Driver (robô) para o Chrome
+servico = Service(ChromeDriverManager().install())
+
+#Para abrir o browser
+navegador = webdriver.Chrome(service=servico)
+
+#Acessando o site do Fifa
+navegador.get("https://www.fifa.com/tournaments/mens/worldcup")
+time.sleep(5)
+
+#Clicando no botão para aceitar os cookies
+try:
+    navegador.find_element('xpath', '//*[@id="onetrust-accept-btn-handler"]').click()
+    
+    time.sleep(2)
+except:
+    pass
+
+#Coletando o html
+site_copas = bs(navegador.page_source, 'html.parser')
+
+#Criando uma lista para armazenar os dados
+dados_copas = []
+links_copas = []
+links_teams = []
+links_partidas_copas = []
+
+#Bloco html com todas as copas
+infos_copas_html = site_copas.find('div', attrs={'class': re.compile('fp-tournament-timeline_tournamentTimeline_.*')})
+
+#Html de cada linha de informação
+infos_copas_linha = infos_copas_html.find_all('div', attrs={'class': re.compile('row fp-tournament-timeline_tournamentTimelineRow_.*')})
+
+#Deixando em loop para coletar as informações de cada linha
+for copa in infos_copas_linha:
+    
+    #Extraindo o ano da copa
+    ano_copa = copa.find('h3').get_text().strip()
+    
+    #Extraindo o link da copa
+    link_copa_html = copa.find('a')
+    link_copa = link_copa_html['href']
+    
+    #Extraindo o link do logo da copa
+    link_logo_html = copa.find('div', attrs={'class': 'image_figureImage__s5UFa'}).find('img')
+    link_logo = link_logo_html['src']
+    
+    #Extraindo o nome da copa
+    nome_copa_tm = copa.find('h4').get_text().strip()
+    qtde_letras_1 = len(nome_copa_tm)
+    nome_copa = nome_copa_tm[:qtde_letras_1-1]
+    sede_copa_cup = nome_copa.find('Cup')
+    
+    #Extraindo a selação vencedora
+    vencedor_texto = copa.find('h6').get_text().strip()
+    dois_pontos_info = vencedor_texto.find(':')
+    vencedor = vencedor_texto[dois_pontos_info+2:]
+                
+    #Extrair a sede da copa
+    if (ano_copa) == '2022':
+        sede_copa = 'Russia'
+    else:
+        sede_copa = nome_copa[sede_copa_cup+4:]
+    
+    if (ano_copa) != '2025':
+        dados_copas.append([ano_copa, 'https://www.fifa.com'+link_copa, link_logo, nome_copa, vencedor, sede_copa])
+    
+    if (ano_copa) == '2025' or (ano_copa) == '2022':
+        print('link inválido')
+    else:
+        links_copas.append(['https://www.fifa.com'+link_copa])
+        links_teams.append(['https://www.fifa.com'+link_copa+'/teams'])
+
+#Criando uma lista para armazenar os dados
+links_escalacoes = []
+
+for url_equipes in links_teams:
+    link_equipe = str(url_equipes)
+    qtde_letras = len(link_equipe)
+    url_limpo = link_equipe[2:qtde_letras-2].strip() 
+           
+    navegador.get(url_limpo)
+    time.sleep(3)
+    
+    #Coletando o html
+    site_equipes = bs(navegador.page_source, 'html.parser')
+    
+    #Extraindo o url do site
+    url_html = site_equipes.find('meta', attrs={'property': 'og:url'})
+    url_completa = url_html['content']
+    fifa_no_url = url_completa.find('fifa')
+    qtde_letras_url = len(url_completa)
+    url = url_completa[fifa_no_url:qtde_letras_url-5]
+
+    #Bloco html com todas equipes
+    todas_equipes = site_equipes.find('div', attrs={'class': 'container ff-py-24'})
+
+    #Html de cada equipe
+    equipe_html = todas_equipes.find_all('div', attrs={'class': 'col-6 col-lg-3'})
+
+    #Deixando em loop para coletar os links de cada equipe
+    for link in equipe_html:
+
+        #Extraindo o link
+        links_escalacao_html = link.find('a', attrs={'class': re.compile('ff-display-card_displayCardLink_.*')})
+        links_escalacao = links_escalacao_html['href']
+
+        links_escalacoes.append(['https://'+url+links_escalacao])
+
+#Criando uma lista para armazenar os dados
+dados_escalacao_selecao = []
+
+#Limpando a url das aspas e deixando um loop
+for url_escalacao in links_escalacoes:
+    link_escalacao = str(url_escalacao)
+    qtde_letras = len(link_escalacao)
+    url_limpo2 = link_escalacao[2:qtde_letras-2].strip()
+    
+    navegador.get(url_limpo2)
+    time.sleep(2)
+    
+    #Coletando o html
+    site_esc = bs(navegador.page_source, 'html.parser')
+    
+    #Bloco html com a info da copa
+    info_copa_html3 = site_esc.find('div', attrs={'class': re.compile('container ff-hero_hero__text__container_.*')})
+
+    #Extraindo a edição da copa
+    ano_copa_sede_tm = info_copa_html3.find('h1', attrs={'class': re.compile('ff-hero_noTransform_.*')}).get_text().strip()
+    qtde_letras_1 = len(ano_copa_sede_tm)
+    ano_copa_sede = ano_copa_sede_tm[:qtde_letras_1-1]
+    ano = ano_copa_sede[:4]
+    sede_copa_cup1 = ano_copa_sede.find('Cup')
+    sede_copa1 = ano_copa_sede[sede_copa_cup1+4:]
+    
+    #Extraindo a selecao
+    try:
+        selecao_html = site_esc.find('div', attrs={'class': re.compile('row fp-team-banner_BannerContainer_.*')})
+        selecao = selecao_html.find('h1').get_text().strip()
+    except:
+        selecao_html1 = site_esc.find('div', attrs={'class': re.compile('fp-squad-player-card_flag_.*')})
+        selecao_alt = selecao_html1.find('img')
+        selecao = selecao_alt['title']
+        
+    #Bloco html com a escalação da seleção
+    escalacao_selecao_html = site_esc.find('div', attrs={'class': re.compile('fp-squad_squadCardsContainer_.*')})
+
+    #Html de cada jogador
+    jogador_html = escalacao_selecao_html.find_all('div', attrs={'class': re.compile('fp-squad-player-card_playerCard_.*')})
+    
+    #Deixando em loop para coletar os dados de cada jogador
+    for jogador in jogador_html:
+
+        #Extraindo o nome do jogador
+        try:
+            nome_jogador = jogador.find('span', attrs={'class': re.compile('fp-squad-player-card_.*Name.*')}).get_text().strip()
+        except:
+            nome_jogador_html = jogador.find_all('div', attrs={'class': re.compile('fp-squad-player-card_.*Name.*')})
+            nome_jogador = ' '.join([nome.text for nome in nome_jogador_html])
+
+        #Extraindo o numero da camiseta
+        numero_camiseta = jogador.find('div', attrs={'class': re.compile('fp-squad-player-card_jerseyNumber_.*')}).get_text().strip()
+
+        #Extraindo a posição do jogador
+        posicao = jogador.find('div', attrs={'class': re.compile('fp-squad-player-card_position_.*')}).get_text().strip()
+        
+        #Adicionando os dados na tabela
+        dados_escalacao_selecao.append([ano, sede_copa1, ano_copa_sede, selecao, nome_jogador, posicao, numero_camiseta])
+        
+    time.sleep(1)
+        
+tabela1 = pd.DataFrame(dados_escalacao_selecao, columns=['ano', 'sede_copa', 'info_copa', 'selecao', 'jogador', 'posicao', 'numero_camiseta'])
+tabela1.to_excel('dados_escalacao_selecao.xlsx', index=False)
+print('fim do código')
